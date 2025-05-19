@@ -16,8 +16,8 @@ starting_salary = st.number_input("Starting Salary (25,000-100,000)", min_value=
 user_input = np.array([[high_school_gpa, sat_score, university_ranking, university_gpa, starting_salary]])
 
 if st.button("Predict"):
-    prediction = model.predict(user_input)
-    prediction_proba = model.predict_proba(user_input)
+    prediction = model.predict(user_input)[0]
+    prediction_proba = model.predict_proba(user_input)[0][1]
 
     if prediction[0] == 1:
         st.success("You are likely to have a good work-life balance.")
@@ -25,5 +25,4 @@ if st.button("Predict"):
         st.error("You are likely to have a poor work-life balance.")
 
     st.write("Prediction Probability:")
-    st.write(f"Good Work-Life Balance: {prediction_proba[0][1]:.2f}")
-    st.write(f"Poor Work-Life Balance: {prediction_proba[0][0]:.2f}")
+    st.write(f"Work-Life Balance: {prediction_proba:.2f}")
