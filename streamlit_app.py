@@ -6,8 +6,8 @@ model     = joblib.load("dt_classifier.pkl")
 FEATURES  = list(model.feature_names_in_)
 GOOD_LABEL = 1
 
-st.set_page_config("Work-Life Balance Classifier", layout="centered")
-st.title("Work-Life Balance Classifier")
+st.set_page_config("Work-Life Balance Prediction", layout="centered")
+st.title("Work-Life Balance Prediction")
 
 fields = {
     "High_School_GPA":   dict(lbl="High-School GPA",  min=1.0,  max=4.0,   step=0.1),
