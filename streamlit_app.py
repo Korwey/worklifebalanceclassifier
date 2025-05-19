@@ -1,4 +1,11 @@
 # streamlit_app.py
+"""
+Work-Life Balance Classifier – Streamlit front-end
+• No “feature-name” warning: the DataFrame uses exactly the names the model saw
+• Lets you choose which class label means “good” (avoids the 0 % bug)
+• Prints all class probabilities so you can see what the model is doing
+"""
+
 import streamlit as st
 import pandas as pd
 import joblib
@@ -6,28 +13,40 @@ import warnings
 from sklearn.exceptions import InconsistentVersionWarning
 
 # ────────────────────────────────────────────────────────────────
-# 0.  (TEMPORARY) silence the version mismatch so your console
-#     isn’t flooded while you debug the feature-name issue.
-#     Later: either ↓pip install 1.5.2 or retrain with 1.6.1.
+# 0.  (optional) hide the version-mismatch warning
+#     Permanent fix: pip-install the training version or retrain
 # ────────────────────────────────────────────────────────────────
 warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
 # ────────────────────────────────────────────────────────────────
-# 1.  Load model & pull *true* feature names + class order
+# 1.  Load model, pull feature names + class labels
 # ────────────────────────────────────────────────────────────────
 model     = joblib.load("dt_classifier.pkl")
-FEATURES  = list(model.feature_names_in_)   # exact column names
-CLASSES   = list(model.classes_)            # e.g. [0, 1] or ['poor', 'good']
-GOOD_LABEL = 1                              # change if class 0 means “good”
+FEATURES  = list(model.feature_names_in_)     # exact training column order
+CLASSES   = list(model.classes_)              # e.g. [0, 1] or ['poor', 'good']
 
 # ────────────────────────────────────────────────────────────────
-# 2.  UI
+# 2.  Page & sidebar
 # ────────────────────────────────────────────────────────────────
 st.set_page_config("Work-Life Balance Classifier", layout="centered")
 st.title("Work-Life Balance Classifier")
 
-# Friendly widget specs, keyed by the exact feature names
-widget = {
+st.sidebar.header("Configuration")
+default_idx = 1 if len(CLASSES) > 1 else 0
+GOOD_LABEL = st.sidebar.selectbox(
+    "Which class means **good** work-life balance?",
+    options=CLASSES,
+    index=default_idx,
+)
+
+with st.sidebar.expander("Debug info"):
+    st.write("model.classes_  :", CLASSES)
+    st.write("feature order   :", FEATURES)
+
+# ────────────────────────────────────────────────────────────────
+# 3.  Input widgets (keys = exact feature names)
+# ────────────────────────────────────────────────────────────────
+spec = {
     "High_School_GPA":   dict(lbl="High-School GPA", min=1.0,  max=4.0,   step=0.1),
     "SAT_Score":         dict(lbl="SAT Score",       min=900,  max=1600,  step=10),
     "University_Ranking":dict(lbl="University Rank", min=1,    max=1000,  step=1),
@@ -36,41 +55,34 @@ widget = {
 }
 
 values = []
-for feat in FEATURES:                         # preserve training order
-    w = widget[feat]
-    fmt = "%.2f" if isinstance(w["min"], float) else "%d"
+for feat in FEATURES:                      # preserve training order
+    cfg = spec[feat]
+    fmt = "%.2f" if isinstance(cfg["min"], float) else "%d"
     val = st.number_input(
-        w["lbl"], w["min"], w["max"], step=w["step"], format=fmt, key=feat
+        cfg["lbl"], cfg["min"], cfg["max"],
+        step=cfg["step"], format=fmt, key=feat
     )
     values.append(val)
 
 # ────────────────────────────────────────────────────────────────
-# 3.  Predict
+# 4.  Predict
 # ────────────────────────────────────────────────────────────────
 if st.button("Predict"):
-    # Build one-row DataFrame with *identical* names
-    X = pd.DataFrame([values], columns=FEATURES)
-
-    # ======== debug panel in the sidebar ========
-    with st.sidebar:
-        st.markdown("### Debug")
-        st.write("Model expects:", FEATURES)
-        st.write("You are sending:", list(X.columns))
-        st.write("X is DataFrame?", isinstance(X, pd.DataFrame))
-        st.write("Classes (order):", CLASSES)
-    # ============================================
-
-    # Hard fail if the names still don’t match
-    assert list(X.columns) == FEATURES, "Column names mismatch – see sidebar!"
+    X = pd.DataFrame([values], columns=FEATURES)   # names match → no warning
 
     pred        = model.predict(X)[0]
-    probas      = model.predict_proba(X)[0]         # 1-D array
-    prob_lookup = dict(zip(CLASSES, probas))
-    p_good      = prob_lookup[GOOD_LABEL]
+    proba_vec   = model.predict_proba(X)[0]        # 1-D array
+    proba_dict  = dict(zip(CLASSES, proba_vec))
+    p_good      = proba_dict[GOOD_LABEL]
 
-    if pred == GOOD_LABEL:
-        st.success(f"✅ Likely a **good** work-life balance ({p_good:.2%})")
-    else:
-        st.error(f"⚠️ Likely a **poor** work-life balance (prob good: {p_good:.2%})")
+    st.subheader("Prediction")
+    st.write(f"Most likely class: **{pred}**")
+    st.write(f"Probability of **good** balance ({GOOD_LABEL}): **{p_good:.2%}**")
 
-    st.caption("No warning? Great – the names match!")
+    st.markdown("---")
+    st.subheader("All class probabilities")
+    for cls, p in proba_dict.items():
+        st.write(f"{cls}: {p:.2%}")
+
+    with st.expander("Raw probabilities vector"):
+        st.write(proba_vec)
