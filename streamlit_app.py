@@ -5,81 +5,72 @@ import joblib
 import warnings
 from sklearn.exceptions import InconsistentVersionWarning
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 0️⃣  (optional) silence the version-mismatch warning
-#     Better: retrain or install the same scikit-learn version you used when
-#     exporting the pickle.  To keep the demo clean you can just mute it.
-# ------------------------------------------------------------------------------
+# ────────────────────────────────────────────────────────────────
+# 0.  (TEMPORARY) silence the version mismatch so your console
+#     isn’t flooded while you debug the feature-name issue.
+#     Later: either ↓pip install 1.5.2 or retrain with 1.6.1.
+# ────────────────────────────────────────────────────────────────
 warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 1️⃣  load the model
-# ------------------------------------------------------------------------------
-model = joblib.load("dt_classifier.pkl")          # make sure the file is present
-FEATURES = list(model.feature_names_in_)          # what the tree saw at training
-GOOD_LABEL = 1                                    # change if class 0 = “good”
+# ────────────────────────────────────────────────────────────────
+# 1.  Load model & pull *true* feature names + class order
+# ────────────────────────────────────────────────────────────────
+model     = joblib.load("dt_classifier.pkl")
+FEATURES  = list(model.feature_names_in_)   # exact column names
+CLASSES   = list(model.classes_)            # e.g. [0, 1] or ['poor', 'good']
+GOOD_LABEL = 1                              # change if class 0 means “good”
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 2️⃣  Streamlit page setup
-# ------------------------------------------------------------------------------
-st.set_page_config(page_title="Work-Life Balance Classifier", layout="centered")
+# ────────────────────────────────────────────────────────────────
+# 2.  UI
+# ────────────────────────────────────────────────────────────────
+st.set_page_config("Work-Life Balance Classifier", layout="centered")
 st.title("Work-Life Balance Classifier")
 
-# Friendly labels + widget specs, keyed by the *exact* feature names
-field_specs = {
-    "High_School_GPA":   {"label": "High-School GPA", "min": 1.0,  "max": 4.0,   "step": 0.1},
-    "SAT_Score":         {"label": "SAT Score",       "min": 900,  "max": 1600,  "step": 10},
-    "University_Ranking":{"label": "University Rank", "min": 1,    "max": 1000,  "step": 1},
-    "University_GPA":    {"label": "University GPA",  "min": 1.0,  "max": 4.0,   "step": 0.1},
-    "Starting_Salary":   {"label": "Starting Salary", "min": 25_000, "max": 100_000, "step": 500},
+# Friendly widget specs, keyed by the exact feature names
+widget = {
+    "High_School_GPA":   dict(lbl="High-School GPA", min=1.0,  max=4.0,   step=0.1),
+    "SAT_Score":         dict(lbl="SAT Score",       min=900,  max=1600,  step=10),
+    "University_Ranking":dict(lbl="University Rank", min=1,    max=1000,  step=1),
+    "University_GPA":    dict(lbl="University GPA",  min=1.0,  max=4.0,   step=0.1),
+    "Starting_Salary":   dict(lbl="Starting Salary", min=25_000, max=100_000, step=500),
 }
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 3️⃣  collect inputs — **in the order expected by the model**
-# ------------------------------------------------------------------------------
 values = []
-for feat in FEATURES:
-    spec = field_specs[feat]
+for feat in FEATURES:                         # preserve training order
+    w = widget[feat]
+    fmt = "%.2f" if isinstance(w["min"], float) else "%d"
     val = st.number_input(
-        label     = spec["label"],
-        min_value = spec["min"],
-        max_value = spec["max"],
-        step      = spec["step"],
-        format    = "%.2f" if isinstance(spec["min"], float) else "%d",
-        key       = feat,
+        w["lbl"], w["min"], w["max"], step=w["step"], format=fmt, key=feat
     )
     values.append(val)
 
-# ──────────────────────────────────────────────────────────────────────────────
-# 4️⃣  prediction
-# ------------------------------------------------------------------------------
+# ────────────────────────────────────────────────────────────────
+# 3.  Predict
+# ────────────────────────────────────────────────────────────────
 if st.button("Predict"):
-    # one-row DataFrame with the *exact* training column names
-    X = pd.DataFrame([values], columns=FEATURES)   # <- no more warning 🎉
+    # Build one-row DataFrame with *identical* names
+    X = pd.DataFrame([values], columns=FEATURES)
+
+    # ======== debug panel in the sidebar ========
+    with st.sidebar:
+        st.markdown("### Debug")
+        st.write("Model expects:", FEATURES)
+        st.write("You are sending:", list(X.columns))
+        st.write("X is DataFrame?", isinstance(X, pd.DataFrame))
+        st.write("Classes (order):", CLASSES)
+    # ============================================
+
+    # Hard fail if the names still don’t match
+    assert list(X.columns) == FEATURES, "Column names mismatch – see sidebar!"
 
     pred        = model.predict(X)[0]
-    proba_row   = model.predict_proba(X)[0]
-    proba_dict  = dict(zip(model.classes_, proba_row))
-    prob_good   = proba_dict[GOOD_LABEL]
+    probas      = model.predict_proba(X)[0]         # 1-D array
+    prob_lookup = dict(zip(CLASSES, probas))
+    p_good      = prob_lookup[GOOD_LABEL]
 
     if pred == GOOD_LABEL:
-        st.success(f"✅ Likely a **good** work-life balance ({prob_good:.2%})")
+        st.success(f"✅ Likely a **good** work-life balance ({p_good:.2%})")
     else:
-        st.error(f"⚠️ Likely a **poor** work-life balance (prob good: {prob_good:.2%})")
+        st.error(f"⚠️ Likely a **poor** work-life balance (prob good: {p_good:.2%})")
 
-    with st.expander("Model details"):
-        st.write("Feature order the model expects:", FEATURES)
-        st.write("Class labels (index in predict_proba):", model.classes_)
-        st.write("Probabilities for this input:", proba_dict)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# 5️⃣  version-mismatch fix (instead of silencing the warning)
-# ------------------------------------------------------------------------------
-# If you’d rather *solve* the InconsistentVersionWarning than hide it, do:
-#
-#     pip install "scikit-learn==<version_used_for_training>"
-#
-# where <version_used_for_training> is the one printed in the warning,
-# then restart the Streamlit app.  Alternatively, retrain your model under
-# the scikit-learn version you use in production and re-export the pickle.
-# ──────────────────────────────────────────────────────────────────────────────
+    st.caption("No warning? Great – the names match!")
