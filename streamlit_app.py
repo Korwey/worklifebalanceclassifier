@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import joblib
 
-model = joblib.load("knn_classifier.pkl")
+model = joblib.load("dt_classifier.pkl")
 
 st.set_page_config(page_title="Work Life Balance Classifier", layout="centered")
 st.title("Work Life Balance Classifier")
